@@ -188,9 +188,21 @@ const fetchWeatherForecast = async (lat, lon, departureDate, duration) => {
 const formatCityForUrl = (cityName) => cityName.toLowerCase().replace(/\s+/g, '-');
 const getTierForCity = (mapboxContext) => { if (!mapboxContext) return 2; const majorMetros = /Mumbai|Delhi|Bangalore|Chennai|Kolkata|Hyderabad|Goa/i; for (const context of mapboxContext) { if (context.id.startsWith('place') && context.text.match(majorMetros)) { return 1; } if (context.id.startsWith('place')) { return 2; } } return 3; };
 
+const NodeCache = require('node-cache');
+const cache = new NodeCache({ stdTTL: 3600 }); // Cache for 1 hour
+
 const generateTripBlueprint = asyncHandler(async (req, res) => {
     const { origin, destinationName, departureDate, duration, travelers } = req.body;
     if (!origin || !destinationName || !departureDate || !duration || !travelers) { res.status(400); throw new Error('Missing required fields'); }
+
+    // Create a unique cache key
+    const cacheKey = `trip_${origin}_${destinationName}_${departureDate}_${duration}_${travelers}`;
+    const cachedData = cache.get(cacheKey);
+
+    if (cachedData) {
+        console.log('⚡ Using cached trip blueprint');
+        return res.status(200).json(cachedData);
+    }
 
     const mapboxApiKey = process.env.MAPBOX_API_KEY;
     if (!mapboxApiKey) { res.status(500); throw new Error('Server configuration error: Mapbox API key is missing.'); }
@@ -275,6 +287,11 @@ const generateTripBlueprint = asyncHandler(async (req, res) => {
             costPerPerson: Math.round(totalEstimatedCost / travelers / 100) * 100,
         },
     };
+
+
+    // Save to cache
+    cache.set(cacheKey, blueprint);
+
     res.status(200).json(blueprint);
 });
 

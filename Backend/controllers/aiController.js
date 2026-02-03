@@ -1,6 +1,6 @@
 // /controllers/aiController.js
 const asyncHandler = require('express-async-handler');
-const axios = require('axios');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- Helpers: Gemini client & JSON extraction ---
 const callGemini = async (prompt) => {
@@ -9,18 +9,13 @@ const callGemini = async (prompt) => {
         throw new Error('Server configuration error: GOOGLE_GEMINI_API_KEY is missing.');
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-    const response = await axios.post(url, {
-        contents: [
-            {
-                role: 'user',
-                parts: [{ text: prompt }],
-            },
-        ],
-    });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
-    const parts = response.data?.candidates?.[0]?.content?.parts || [];
-    const text = parts.map((p) => p.text || '').join(' ').trim();
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
     if (!text) {
         throw new Error('Empty response from Gemini');
     }
@@ -190,11 +185,11 @@ const suggestItinerary = asyncHandler(async (req, res) => {
     const days = parseInt(duration, 10) || 1;
     const weatherSummary = Array.isArray(weatherForecast)
         ? weatherForecast
-              .map(
-                  (d, index) =>
-                      `Day ${index + 1}: ${d.date || ''} - ${d.description || ''} (high ${d.temp_max}°C, low ${d.temp_min}°C)`,
-              )
-              .join('\n')
+            .map(
+                (d, index) =>
+                    `Day ${index + 1}: ${d.date || ''} - ${d.description || ''} (high ${d.temp_max}°C, low ${d.temp_min}°C)`,
+            )
+            .join('\n')
         : '';
 
     const prompt = `You are an expert travel planner.
@@ -336,7 +331,7 @@ const generateMockBackpackList = (destinationName, duration, travelers, weatherF
                 'Sunglasses',
                 'Reusable shopping bag',
                 'Notebook & pen',
-                `Snacks for ${people} traveler(s)` ,
+                `Snacks for ${people} traveler(s)`,
             ],
         },
     };
@@ -394,11 +389,11 @@ const generateBackpackList = asyncHandler(async (req, res) => {
 
     const weatherSummary = Array.isArray(weatherForecast)
         ? weatherForecast
-              .map(
-                  (d, index) =>
-                      `Day ${index + 1}: ${d.date || ''} - ${d.description || ''} (high ${d.temp_max}°C, low ${d.temp_min}°C)`,
-              )
-              .join('\n')
+            .map(
+                (d, index) =>
+                    `Day ${index + 1}: ${d.date || ''} - ${d.description || ''} (high ${d.temp_max}°C, low ${d.temp_min}°C)`,
+            )
+            .join('\n')
         : '';
 
     const prompt = `You are a smart travel packing assistant.

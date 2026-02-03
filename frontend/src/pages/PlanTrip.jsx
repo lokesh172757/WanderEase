@@ -26,6 +26,8 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import RouteMap from '@/components/RouteMap';
+import TripBlueprintSkeleton from '@/components/skeletons/TripBlueprintSkeleton';
+import AIItinerary from '@/components/AIItinerary';
 
 const PlanTrip = () => {
   const location = useLocation();
@@ -192,7 +194,7 @@ const PlanTrip = () => {
           </Card>
 
           {/* Blueprint Results */}
-          {isLoading && <LoadingSpinner message="Generating your trip blueprint..." />}
+          {isLoading && <TripBlueprintSkeleton />}
 
           {blueprint && !isLoading && (
             <div className="space-y-6">
@@ -381,6 +383,16 @@ const PlanTrip = () => {
                 </CardContent>
               </Card>
 
+
+
+              {/* AI Features */}
+              <AIItinerary
+                destinationName={blueprint.tripDetails.destinationName}
+                duration={blueprint.tripDetails.duration}
+                travelers={blueprint.tripDetails.travelers}
+                weatherForecast={blueprint.weatherForecast}
+              />
+
               {/* Save Trip */}
               <Card className="shadow-card-hover">
                 <CardHeader>
@@ -432,7 +444,7 @@ const PlanTrip = () => {
       </div>
 
       <Footer />
-    </div>
+    </div >
   );
 };
 

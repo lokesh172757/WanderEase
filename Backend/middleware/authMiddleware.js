@@ -5,9 +5,15 @@ const User = require('../models/User.js');
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
+
+  token = req.cookies.jwt;
+
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (token) {
     try {
-      token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       console.log('✅ Auth Middleware: Token decoded successfully for ID:', decoded.id);
 

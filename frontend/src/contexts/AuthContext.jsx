@@ -6,26 +6,28 @@ const AuthContext = createContext(undefined);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+  const checkAuth = async () => {
+    try {
+      const userData = await authService.getMe();
+      setUser(userData);
+    } catch (error) {
+      console.log('Not authenticated');
+      setUser(null);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    checkAuth();
   }, []);
 
   const login = async (email, password) => {
     try {
       const data = await authService.login(email, password);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({ _id: data._id, name: data.name, email: data.email }));
-      setToken(data.token);
+      // Backend now sets the cookie, data contains user info
       setUser({ _id: data._id, name: data.name, email: data.email });
       toast.success('Login successful!');
     } catch (error) {
@@ -38,9 +40,6 @@ export const AuthProvider = ({ children }) => {
   const register = async (name, email, password) => {
     try {
       const data = await authService.register(name, email, password);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify({ _id: data._id, name: data.name, email: data.email }));
-      setToken(data.token);
       setUser({ _id: data._id, name: data.name, email: data.email });
       toast.success('Registration successful!');
     } catch (error) {
@@ -50,16 +49,25 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
+  const logout = async () => {
+    // In a real app we might call a server endpoint to clear cookie: await authService.logout();
+    // For now we just clear local state, but the cookie will persist unless we implement server-side logout 
+    // OR we play a trick by sending a request to specific logout endpoint if exists.
+    // Assuming we need to implement server side logout or handle cookie clearing.
+    // Ideally: await authService.logout();
     setUser(null);
+    // Force reload or manual cookie clearing if possible (cannot clear HttpOnly from client script).
+    // Best practice: Add logout endpoint.
+    try {
+      await authService.logout();
+    } catch (e) {
+      console.error("Logout failed", e);
+    }
     toast.success('Logged out successfully');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
