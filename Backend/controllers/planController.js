@@ -4,72 +4,72 @@ const axios = require('axios');
 
 // ✈ Flight Pricing (Domestic, economy)
 const simulateFlightCost = (distanceKm) => {
-  if (distanceKm < 250) return null; // short trips usually not worth flights
+    if (distanceKm < 250) return null; // short trips usually not worth flights
 
-  const baseFare = 2800; // typical starting fare
-  const perKmCost = 4.8; // average domestic airfare/km in India
-  let cost = baseFare + distanceKm * perKmCost;
+    const baseFare = 2800; // typical starting fare
+    const perKmCost = 4.8; // average domestic airfare/km in India
+    let cost = baseFare + distanceKm * perKmCost;
 
-  // Fuel surcharge & airport fee approx
-  cost += 500;
+    // Fuel surcharge & airport fee approx
+    cost += 500;
 
-  return Math.round(cost / 100) * 100;
+    return Math.round(cost / 100) * 100;
 };
 
 
 // 🚌 Bus Pricing (AC Sleeper or Semi-Sleeper)
 const simulateBusCost = (distanceKm) => {
-  if (distanceKm < 50) return null;
+    if (distanceKm < 50) return null;
 
-  const perKmCost = 2.2; // average AC sleeper fare
-  let cost = distanceKm * perKmCost;
+    const perKmCost = 2.2; // average AC sleeper fare
+    let cost = distanceKm * perKmCost;
 
-  // round off to nearest 50
-  return Math.round(cost / 50) * 50;
+    // round off to nearest 50
+    return Math.round(cost / 50) * 50;
 };
 
 
 // 🚗 Car / Cab Pricing (Outstation rental norms in India)
 const simulateCarCost = (distanceKm, days = 1, carType = "sedan") => {
-  const ratePerKm = {
-    hatchback: 12,
-    sedan: 14,
-    suv: 18
-  };
+    const ratePerKm = {
+        hatchback: 12,
+        sedan: 14,
+        suv: 18
+    };
 
-  const minDailyKm = 250; // Outstation rule
-  const driverAllowance = 400; // per day
-  const perKmCost = ratePerKm[carType] || 14;
+    const minDailyKm = 250; // Outstation rule
+    const driverAllowance = 400; // per day
+    const perKmCost = ratePerKm[carType] || 14;
 
-  // Outstation taxis count *return distance*
-  const billableDistance = Math.max(distanceKm * 2, minDailyKm * days);
+    // Outstation taxis count *return distance*
+    const billableDistance = Math.max(distanceKm * 2, minDailyKm * days);
 
-  let cost = billableDistance * perKmCost + driverAllowance * days;
+    let cost = billableDistance * perKmCost + driverAllowance * days;
 
-  // round off to nearest 100
-  return Math.round(cost / 100) * 100;
+    // round off to nearest 100
+    return Math.round(cost / 100) * 100;
 };
 
 
 // 🏨 Hotel Pricing (Tier-wise)
 const simulateHotelCost = (destinationTier, duration, roomType = "standard") => {
-  // tier: 1 = metro, 2 = tourist city, 3 = small cities
-  const tierBaseRate = {
-    1: 3500,  // Delhi, Mumbai, Bangalore
-    2: 2500,  // Goa, Jaipur, Manali, Coorg
-    3: 1200   // Towns & smaller tourist spots
-  };
+    // tier: 1 = metro, 2 = tourist city, 3 = small cities
+    const tierBaseRate = {
+        1: 3500,  // Delhi, Mumbai, Bangalore
+        2: 2500,  // Goa, Jaipur, Manali, Coorg
+        3: 1200   // Towns & smaller tourist spots
+    };
 
-  const roomMultiplier = {
-    standard: 1,
-    deluxe: 1.6,
-    luxury: 2.4
-  };
+    const roomMultiplier = {
+        standard: 1,
+        deluxe: 1.6,
+        luxury: 2.4
+    };
 
-  const baseRate = tierBaseRate[destinationTier] || 2000;
-  const multiplier = roomMultiplier[roomType] || 1;
+    const baseRate = tierBaseRate[destinationTier] || 2000;
+    const multiplier = roomMultiplier[roomType] || 1;
 
-  return Math.round(baseRate * multiplier * duration / 100) * 100;
+    return Math.round(baseRate * multiplier * duration / 100) * 100;
 };
 
 // Fetch real weather forecast using OpenWeatherMap 5-day/3-hour API
@@ -195,21 +195,48 @@ const generateTripBlueprint = asyncHandler(async (req, res) => {
     const mapboxApiKey = process.env.MAPBOX_API_KEY;
     if (!mapboxApiKey) { res.status(500); throw new Error('Server configuration error: Mapbox API key is missing.'); }
 
-    const destGeocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destinationName)}.json?access_token=${mapboxApiKey}&limit=1&country=IN`;
-    const destGeocodeResponse = await axios.get(destGeocodeUrl);
+    let destGeocodeResponse, originGeocodeResponse, directionsResult;
+
+    try {
+        const destGeocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destinationName)}.json?access_token=${mapboxApiKey}&limit=1&country=IN`;
+        destGeocodeResponse = await axios.get(destGeocodeUrl);
+    } catch (error) {
+        console.error('❌ Mapbox Geocoding Error (Destination):', error.response?.data || error.message);
+        if (error.response?.status === 401) {
+            res.status(500);
+            throw new Error('Server Config Error: Invalid Mapbox API Key');
+        }
+        res.status(502);
+        throw new Error('Failed to find destination location');
+    }
+
     if (!destGeocodeResponse.data || destGeocodeResponse.data.features.length === 0) { res.status(404); throw new Error('Could not find the destination city.'); }
-    
+
     const destinationFeature = destGeocodeResponse.data.features[0];
     const destination = { name: destinationFeature.text, lon: destinationFeature.center[0], lat: destinationFeature.center[1], tier: getTierForCity(destinationFeature.context) };
-    
-    const originGeocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(origin)}.json?access_token=${mapboxApiKey}&limit=1&country=IN`;
-    const originGeocodeResponse = await axios.get(originGeocodeUrl);
+
+    try {
+        const originGeocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(origin)}.json?access_token=${mapboxApiKey}&limit=1&country=IN`;
+        originGeocodeResponse = await axios.get(originGeocodeUrl);
+    } catch (error) {
+        console.error('❌ Mapbox Geocoding Error (Origin):', error.response?.data || error.message);
+        res.status(502);
+        throw new Error('Failed to find origin location');
+    }
+
     if (!originGeocodeResponse.data || originGeocodeResponse.data.features.length === 0) { res.status(400); throw new Error('Could not find the origin city.'); }
-    
+
     const originCoords = originGeocodeResponse.data.features[0].center;
-    const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${originCoords.join(',')};${destination.lon},${destination.lat}?geometries=geojson&access_token=${mapboxApiKey}`;
-    const directionsResult = await axios.get(directionsUrl);
-    
+
+    try {
+        const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${originCoords.join(',')};${destination.lon},${destination.lat}?geometries=geojson&access_token=${mapboxApiKey}`;
+        directionsResult = await axios.get(directionsUrl);
+    } catch (error) {
+        console.error('❌ Mapbox Directions Error:', error.response?.data || error.message);
+        res.status(502);
+        throw new Error('Failed to calculate route');
+    }
+
     const primaryRoute = directionsResult.data.routes[0];
     const distanceKm = primaryRoute.distance / 1000;
 
@@ -220,13 +247,13 @@ const generateTripBlueprint = asyncHandler(async (req, res) => {
     const busCost = simulateBusCost(distanceKm);
     const carCost = simulateCarCost(distanceKm);
     const hotelCost = simulateHotelCost(destination.tier, duration);
-    
+
     const originUrl = formatCityForUrl(origin);
     const destUrl = formatCityForUrl(destination.name);
 
     const transportOptions = { flight: { costPerPerson: flightCost, link: `https://www.skyscanner.co.in/transport/flights-from/${originUrl}-to/${destUrl}` }, bus: { costPerPerson: busCost, link: `https://www.redbus.in/bus-tickets/${originUrl}-to-${destUrl}` }, car: { totalCost: carCost, link: `https://www.olacabs.com/outstation` }, };
     const accommodation = { estimatedTotalCost: hotelCost, link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destination.name)}` };
-    
+
     const totalHotelCost = hotelCost;
     const otherCosts = (1500 * destination.tier) * duration * travelers;
     const cheapestTransport = Math.min((flightCost || Infinity) * travelers, (busCost || Infinity) * travelers, carCost || Infinity);
